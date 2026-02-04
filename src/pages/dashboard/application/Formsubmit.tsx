@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import telthlogo from '../../../../public/Telth Logo.png'
+import { useToast } from '../../../Toast/contexts/ToastContext';
 
 
 // Interface defining the structure of form data
@@ -43,8 +44,8 @@ interface ApplicationFormData {
 }
 
 const ApplicationForm: React.FC = () => {
-  // State to manage form data with initial empty values
-  const [formData, setFormData] = useState<ApplicationFormData>({
+  // Initial form state - extracted to a constant for reuse
+  const initialFormData: ApplicationFormData = {
     JobID: "",
     JobTitle: "",
     CandidateName: "",
@@ -71,10 +72,15 @@ const ApplicationForm: React.FC = () => {
     CustomAnswers: {},
     Notes: "",
     Source: "Website",
-  });
+  };
+
+  // State to manage form data with initial empty values
+  const [formData, setFormData] = useState<ApplicationFormData>(initialFormData);
 
   // Temporary state for adding skills (comma-separated input)
   const [skillInput, setSkillInput] = useState("");
+  const { showSuccess, showError, showInfo } = useToast();
+
   // Temporary state for adding references (comma-separated input)
   const [referenceInput, setReferenceInput] = useState<Reference>({
     name: "",
@@ -92,8 +98,24 @@ const ApplicationForm: React.FC = () => {
   const [uploadError, setUploadError] = useState<string>("");
 
   // Replace with your actual backend URL
-  const BACKEND_URL = 'https://api.mytelth.com/api/storage';
-  const JOB_POST_URL = 'https://api.mytelth.com/api/careers';
+  // const BACKEND_URL = 'https://api.mytelth.com/api/storage';
+  // const JOB_POST_URL = 'https://api.mytelth.com/api/careers';
+  const BACKEND_URL = 'http://192.168.1.47:8080/api/storage';
+  const JOB_POST_URL = 'http://192.168.1.47:8080/api/careers';
+
+  // Function to reset the entire form
+  const resetForm = () => {
+    setFormData(initialFormData);
+    setSkillInput("");
+    setReferenceInput({
+      name: "",
+      position: "",
+      company: "",
+      email: "",
+    });
+    setResumeFile(null);
+    setUploadError("");
+  };
 
   // Generic handler for text, number, checkbox inputs
   const handleChange = (
@@ -150,12 +172,12 @@ const ApplicationForm: React.FC = () => {
   // Convert comma-separated string to array and update References (limit to 2)
   const handleReferencesAdd = () => {
     if (!referenceInput.name || !referenceInput.email) {
-      alert("Name and Email are required for reference");
+      showInfo("Name and Email are required for reference");
       return;
     }
 
     if (formData.References.length >= 2) {
-      alert("Maximum 2 references allowed");
+      showInfo("Maximum 2 references allowed");
       return;
     }
 
@@ -191,48 +213,27 @@ const ApplicationForm: React.FC = () => {
 
   // Upload resume to SharePoint and get the web URL
   const uploadResumeToSharePoint = async (file: File): Promise<string> => {
+    setIsUploading(true);
     try {
-      setIsUploading(true);
-      setUploadError("");
+      const fd = new FormData();
+      fd.append('resume', file);
 
-      // Step 1: Upload file to SharePoint
-      const formData = new FormData();
-      formData.append('resume', file);
-
-      const uploadResponse = await fetch(`${BACKEND_URL}/upload-resume`, {
+      const uploadRes = await fetch(`${BACKEND_URL}/upload-resume`, {
         method: 'POST',
-        body: formData,
+        body: fd,
       });
 
-      if (!uploadResponse.ok) {
-        throw new Error('Failed to upload resume to TelthDB');
-      }
+      if (!uploadRes.ok) throw new Error('Resume upload failed');
 
-      const uploadData = await uploadResponse.json();
-      const fileId = uploadData?.data?.fileId;
+      const { data } = await uploadRes.json();
+      const fileId = data?.fileId;
+      if (!fileId) throw new Error('File ID missing');
 
-      if (!fileId) {
-        throw new Error('No file ID returned from upload');
-      }
+      const urlRes = await fetch(`${BACKEND_URL}/file-url/${fileId}`);
+      if (!urlRes.ok) throw new Error('Failed to fetch file URL');
 
-      // Step 2: Get the web URL using the file ID
-      const urlResponse = await fetch(`${BACKEND_URL}/file-url/${fileId}`);
-
-      if (!urlResponse.ok) {
-        throw new Error('Failed to get file URL from SharePoint');
-      }
-
-      const urlData = await urlResponse.json();
-      const webUrl = urlData?.data?.webUrl;
-
-      if (!webUrl) {
-        throw new Error('No web URL returned');
-      }
-
-      return webUrl;
-    } catch (error) {
-      console.error('Error uploading to SharePoint:', error);
-      throw error;
+      const urlData = await urlRes.json();
+      return urlData.data.webUrl;
     } finally {
       setIsUploading(false);
     }
@@ -285,14 +286,14 @@ const ApplicationForm: React.FC = () => {
         // Update form data with the SharePoint web URL
         setFormData(prev => ({ ...prev, ResumeURL: webUrl }));
 
-        alert('Resume uploaded successfully!');
+        showSuccess('Resume uploaded successfully!');
       } catch (error) {
         setUploadError('Failed to upload resume. Please try again.');
         setResumeFile(null);
-        alert('Failed to upload resume. Please try again.');
+        showError('Failed to upload resume. Please try again.');
       }
     } else {
-      alert('Please upload PDF or Word document only');
+      showInfo('Please upload PDF or Word document only');
     }
   };
 
@@ -305,42 +306,60 @@ const ApplicationForm: React.FC = () => {
 
   // Form submission handler
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault(); // Prevent default form submission (page reload)
+    e.preventDefault();
 
-    // Validate that resume is uploaded
-    if (!formData.ResumeURL) {
-      alert('Please upload your resume before submitting the application.');
+    const errors: string[] = [];
+    if (!formData.CandidateName) errors.push('Full Name is required');
+    if (!formData.Email) errors.push('Email is required');
+    if (!formData.Phone) errors.push('Phone number is required');
+    if (!formData.DOB) errors.push('Date of Birth is required');
+    if (!formData.ResumeURL) errors.push('Resume upload is required');
+
+    if (errors.length) {
+      showError('Please fix the following errors', errors);
       return;
     }
 
-    // Validate required fields
-    if (!formData.CandidateName || !formData.Email || !formData.Phone || !formData.DOB) {
-      alert('Please fill in all required fields marked with *');
-      return;
-    }
-    // Here you can send the formData to your backend endpoint for application submission
     try {
-      // Example submission (uncomment and modify as needed):
-
-      const response = await fetch(`${JOB_POST_URL}/submitapplication`, {
+      const res = await fetch(`${JOB_POST_URL}/submitapplication`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(formData),
       });
 
-      if (!response.ok) {
-        throw new Error('Failed to submit application');
+      const data = await res.json();
+
+      if (!res.ok) {
+        const extractedErrors: string[] = [];
+
+        if (Array.isArray(data.errors)) {
+          extractedErrors.push(...data.errors);
+        }
+
+        if (typeof data.error === 'string') {
+          // Split mongoose validation errors nicely
+          const splitErrors = data.error
+            .replace('Application validation failed:', '')
+            .split(',')
+            .map((e: string) => e.trim());
+
+          extractedErrors.push(...splitErrors);
+        }
+
+        showError(
+          data.message || 'Submission failed',
+          extractedErrors.length ? extractedErrors : ['Unknown server error']
+        );
+        return;
       }
 
-      const result = await response.json();
-      alert('Application submitted successfully!');
-      // Reset form or redirect user
-
-    } catch (error) {
-      console.error('Error submitting application:', error);
-      alert('Failed to submit application. Please try again.');
+      showSuccess('Application submitted successfully');
+      
+      // Reset the form after successful submission
+      resetForm();
+      
+    } catch {
+      showError('Submission failed', ['Network or server issue']);
     }
   };
 
@@ -379,7 +398,7 @@ const ApplicationForm: React.FC = () => {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Job ID
+                    Job ID (optional)
                   </label>
                   <input
                     type="text"
@@ -510,7 +529,7 @@ const ApplicationForm: React.FC = () => {
                     Current Salary in (LPA)
                   </label>
                   <input
-                    type="text"
+                    type="Number"
                     name="Currentsalary"
                     value={formData.Currentsalary}
                     onChange={handleChange}
@@ -558,7 +577,7 @@ const ApplicationForm: React.FC = () => {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Degree
+                    Degree/(Schooling if below 19)
                   </label>
                   <input
                     type="text"
@@ -661,8 +680,8 @@ const ApplicationForm: React.FC = () => {
                 onDragOver={handleDragOver}
                 onDragLeave={handleDragLeave}
                 className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors ${isDragging
-                    ? 'border-purple-500 bg-purple-50'
-                    : 'border-gray-300 bg-gray-50'
+                  ? 'border-purple-500 bg-purple-50'
+                  : 'border-gray-300 bg-gray-50'
                   } ${isUploading ? 'opacity-50 pointer-events-none' : ''}`}
               >
                 {isUploading ? (
@@ -779,42 +798,61 @@ const ApplicationForm: React.FC = () => {
                     type="text"
                     value={referenceInput.name}
                     onChange={e => setReferenceInput({ ...referenceInput, name: e.target.value })}
-                    placeholder="Enter references separated by commas"
+                    placeholder="Name"
                     disabled={formData.References.length >= 2}
                     className={`flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500 ${formData.References.length >= 2 ? 'bg-gray-100 cursor-not-allowed' : ''
                       }`}
-                    onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), handleReferencesAdd())}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                      }
+                    }}
                   />
                   <input
                     type="text"
                     placeholder="Position"
                     value={referenceInput.position}
-                     className={`flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500`}
+                    className={`flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500`}
                     onChange={e => setReferenceInput({ ...referenceInput, position: e.target.value })}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                      }
+                    }}
                   />
 
                   <input
                     type="text"
                     placeholder="Company"
                     value={referenceInput.company}
-                     className={`flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500`}
+                    className={`flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500`}
                     onChange={e => setReferenceInput({ ...referenceInput, company: e.target.value })}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                      }
+                    }}
                   />
 
                   <input
                     type="email"
                     placeholder="Email"
                     value={referenceInput.email}
-                     className={`flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500`}
+                    className={`flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500`}
                     onChange={e => setReferenceInput({ ...referenceInput, email: e.target.value })}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                      }
+                    }}
                   />
                   <button
                     type="button"
                     onClick={handleReferencesAdd}
                     disabled={formData.References.length >= 2}
                     className={`px-4 py-2 font-semibold rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500 ${formData.References.length >= 2
-                        ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                        : 'bg-purple-600 text-white hover:bg-purple-700'
+                      ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                      : 'bg-purple-600 text-white hover:bg-purple-700'
                       }`}
                   >
                     Add
@@ -826,7 +864,7 @@ const ApplicationForm: React.FC = () => {
                       key={index}
                       className="inline-flex items-center px-3 py-1 bg-green-100 text-green-800 rounded-full text-sm"
                     >
-                      {reference.company}
+                      {reference.name} - {reference.company}
                       <button
                         type="button"
                         onClick={() => removeReference(index)}
@@ -947,9 +985,9 @@ const ApplicationForm: React.FC = () => {
               <h3 className="text-lg font-semibold mb-4">Quick Links</h3>
               <ul className="space-y-2 text-sm">
                 <li><a href="#" className="text-purple-200 hover:text-white transition-colors">Careers</a></li>
-                <li><a href="#" className="text-purple-200 hover:text-white transition-colors">About</a></li>
+                <li><a href="https://www.mytelth.com/" className="text-purple-200 hover:text-white transition-colors">About</a></li>
                 <li><a href="#" className="text-purple-200 hover:text-white transition-colors">Contact</a></li>
-                <li><a href="#" className="text-purple-200 hover:text-white transition-colors">Privacy Policy</a></li>
+                <li><a href="https://www.mytelth.com/privacy-policies" className="text-purple-200 hover:text-white transition-colors">Privacy Policy</a></li>
               </ul>
             </div>
 
@@ -957,15 +995,15 @@ const ApplicationForm: React.FC = () => {
             <div>
               <h3 className="text-lg font-semibold mb-4">Contact</h3>
               <ul className="space-y-2 text-sm text-purple-200">
-                <li>Email: careers@company.com</li>
-                <li>Phone: +1 (555) 123-4567</li>
-                <li>Address: 123 Business St, City, State</li>
+                <li>Email: hr@mytelth.com</li>
+                <li>Phone: +91 9514555036</li>
+                <li>Address: Tidel neo, salem, Tamilnadu</li>
               </ul>
             </div>
           </div>
 
           <div className="border-t border-purple-800 mt-8 pt-6 text-center text-sm text-purple-300">
-            <p>&copy; 2024 Your Company Name. All rights reserved.</p>
+            <p>&copy; Mytelth. All rights reserved.</p>
           </div>
         </div>
       </footer>

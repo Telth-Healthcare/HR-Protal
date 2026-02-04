@@ -8,9 +8,13 @@ import { CreateJob } from './pages/jobs/CreateJob';
 import { EditJobPage } from './pages/jobs/EditJob';
 import { ApplicationTable } from './pages/dashboard/ApplicationTable';
 import ApplyJob from './pages/dashboard/application/Formsubmit';
+import { ToastProvider } from './Toast/contexts/ToastContext';
 
 function App() {
   return (
+    
+       <ToastProvider>
+      {/* Your app components */}
     <AuthProvider>
       <Router>
         <Routes>
@@ -63,6 +67,7 @@ function App() {
         </Routes>
       </Router>
     </AuthProvider>
+    </ToastProvider>
   );
 }
 
