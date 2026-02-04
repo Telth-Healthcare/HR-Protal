@@ -92,8 +92,8 @@ const ApplicationForm: React.FC = () => {
   const [uploadError, setUploadError] = useState<string>("");
 
   // Replace with your actual backend URL
-  const BACKEND_URL = 'https://careers.mytelth.com/api/storage';
-  const JOB_POST_URL = 'https://careers.mytelth.com/api/careers';
+  const BACKEND_URL = 'https://api.mytelth.com/api/storage';
+  const JOB_POST_URL = 'https://api.mytelth.com/api/careers';
 
   // Generic handler for text, number, checkbox inputs
   const handleChange = (
