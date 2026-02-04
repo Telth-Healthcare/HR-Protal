@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const API_BASE_URL = 'http://192.168.1.47:8080/api';
+const API_BASE_URL = 'https://careers.mytelth.com/api';
 
 const axiosInstance = axios.create({
   baseURL: API_BASE_URL,
