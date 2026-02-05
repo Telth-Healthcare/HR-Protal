@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import telthlogo from '../../../../public/Telth Logo.png'
 import { useToast } from '../../../Toast/contexts/ToastContext';
+import { useSearchParams } from 'react-router-dom';
 
 
 // Interface defining the structure of form data
@@ -42,12 +43,16 @@ interface ApplicationFormData {
   Notes: string;
   Source: string;
 }
-
 const ApplicationForm: React.FC = () => {
   // Initial form state - extracted to a constant for reuse
+  const [searchParams] = useSearchParams();
+    
+    // Extract from URL
+    const jobId = searchParams.get("jobId");
+    const jobTitle = searchParams.get("jobTitle");
   const initialFormData: ApplicationFormData = {
-    JobID: "",
-    JobTitle: "",
+    JobID: jobId || "",           // ✅ Auto-filled from URL
+    JobTitle: jobTitle || "",     // ✅ Auto-filled from URL
     CandidateName: "",
     DOB: "",
     Email: "",
@@ -96,6 +101,7 @@ const ApplicationForm: React.FC = () => {
   // State for upload progress
   const [isUploading, setIsUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string>("");
+
 
   // Replace with your actual backend URL
   const BACKEND_URL = 'https://api.mytelth.com/api/storage';
@@ -403,6 +409,7 @@ const ApplicationForm: React.FC = () => {
                   <input
                     type="text"
                     name="JobID"
+                    readOnly
                     value={formData.JobID}
                     onChange={handleChange}
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
@@ -415,6 +422,7 @@ const ApplicationForm: React.FC = () => {
                   <input
                     type="text"
                     name="JobTitle"
+                    readOnly
                     value={formData.JobTitle}
                     onChange={handleChange}
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
